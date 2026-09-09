@@ -94,3 +94,9 @@ Stage 1's tagging/alias-analysis/rejection-filter logic works correctly on real 
 This is a legitimate, well-evidenced contribution: you diagnosed and fixed real implementation defects in a research compiler pass using rigorous debugging (not guesswork), while being honest about the one thing your current environment can't measure. The natural next step, stated as future work, is running this same fixed pipeline on real AArch64 hardware to see if it closes any of the gap toward the paper's 1.7× hand-tuned ceiling.
 
 __________________________________________________________________________________________________________________________________________________________________________
+
+What we're doing, in one paragraph
+
+We're porting the CFC compiler pass from AArch64 to x86-64 so we can benchmark it on your real physical CPU instead of through QEMU emulation. Recall the big limitation from earlier: QEMU has no model of CPU execution ports, so we could never actually tell if CFC's interleaving scheduler helps or hurts real performance — only that it runs without crashing. Porting to x86 solves that completely, since your Fedora machine's Xeon E-2314 is real hardware with real ports. We've already found that Stage 1 (tagging) and Layer 1 (fusion) port over almost unchanged, and we rewrote Layer 2's classifier since x86 shares ports between scalar/vector unlike AArch64. All 4 new files are now correctly placed. The mv errors are harmless — they just mean the files had already landed in the target directory from your transfer, nothing lost.
+
+________________________________________________________________________________________________________________________________________________________________________________
