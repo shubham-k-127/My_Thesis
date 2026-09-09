@@ -58,3 +58,39 @@ What this means
 Where we match closely — large_balanced and large_imbalanced (the paper's headline scenarios: "large functions gain the most") — this is the strongest validation. The paper's central claim replicates on your setup even under QEMU emulation with a completely different simulated microarchitecture (Neoverse V2 emulated vs. real Apple M4 silicon).
 
 Where we conflict — noncomp_scalar is the most notable: the paper explicitly calls this out as an expected regression (both callees hit the same INT ports, so fusion should hurt, not help) — but our run shows a gain. Given QEMU is instruction-emulated rather than modeling real port contention, this is a plausible explanation: QEMU's interpreter doesn't actually simulate execution-port contention at all — it just executes instructions correctly, so any "port pressure" effect the paper measures on real silicon literally cannot be reproduced under emulation. This is an important, honest limitation to state clearly in your write-up: relative timing comparisons under QEMU can capture inlining/call-overhead effects (which do transfer) but cannot capture true port-level scheduling effects (which the emulator has no model of).
+
+______________________________________________________________________________________________________________________________________________________________________________
+
+
+Summary: what we set out to do, and what we actually achieved
+
+Goal: Take the real iitgn-fuss/CFC LLVM compiler pass, verify its actual behavior against the paper's claims, find and fix real bugs, and produce evidence.
+
+Three concrete achievements
+
+1. Built and validated a working cross-compilation pipeline from scratch
+Your custom CFC-patched clang (built on x86_64 Fedora) → compiles for AArch64 → links and runs correctly inside a QEMU-emulated aarch64 container. This took real problem-solving (sysroot discovery, linker issues, header incompatibilities) and now works reliably.
+
+2. Found and fixed Bug #1 — Layer 2 scheduler was dead code
+The cfc-fused attribute that activates the interleaving scheduler was never written by the fusion pass. One-line fix. Confirmed via debug logs that the scheduler now actually runs its port-balancing logic.
+
+3. Found and fixed Bug #2 — corrupted uop counting
+The scheduler was misreading LLVM's internal "needs resolution" sentinel value (8190) as a real instruction count for multiply-accumulate instructions, inflating totals by orders of magnitude (163,842 → corrected to 62). Fixed using the proper TargetSchedModel::resolveSchedClass() API. Confirmed via direct before/after debug output.
+
+Both fixes verified safe: all 20 benchmark scenarios pass correctness checks (checksums match across seq/default/cfc variants) before and after both patches — zero regressions introduced.
+
+What this final run actually shows
+
+Comparing this run to our very first baseline (before any patches): the timing numbers are essentially unchanged (differences under ~2%, consistent with normal run-to-run noise we've seen throughout). This is expected and important to state honestly, not disappointing: QEMU user-mode emulation has no model of CPU execution ports or instruction-level parallelism — it just interprets instructions correctly, one at a time. So even though Layer 2's interleaving scheduler is now genuinely active and making real port-balancing decisions (proven via debug logs), QEMU is structurally incapable of revealing whether those decisions help or hurt real hardware throughput.
+
+The honest bottom line for your thesis
+What we proved	What remains unproven (needs real hardware)
+The codebase has real, well-tested analysis logic (7/7 unit tests)	Whether Layer 2's interleaving actually speeds up real execution
+Two concrete bugs existed, root-caused precisely	The paper's core port-contention claims (can't be tested under QEMU by construction)
+Both bugs are now fixed with minimal, correct patches	—
+Zero correctness regressions from either fix, across 20 scenarios	—
+Stage 1's tagging/alias-analysis/rejection-filter logic works correctly on real compiled code	—
+
+This is a legitimate, well-evidenced contribution: you diagnosed and fixed real implementation defects in a research compiler pass using rigorous debugging (not guesswork), while being honest about the one thing your current environment can't measure. The natural next step, stated as future work, is running this same fixed pipeline on real AArch64 hardware to see if it closes any of the gap toward the paper's 1.7× hand-tuned ceiling.
+
+__________________________________________________________________________________________________________________________________________________________________________
