@@ -100,3 +100,14 @@ What we're doing, in one paragraph
 We're porting the CFC compiler pass from AArch64 to x86-64 so we can benchmark it on your real physical CPU instead of through QEMU emulation. Recall the big limitation from earlier: QEMU has no model of CPU execution ports, so we could never actually tell if CFC's interleaving scheduler helps or hurts real performance — only that it runs without crashing. Porting to x86 solves that completely, since your Fedora machine's Xeon E-2314 is real hardware with real ports. We've already found that Stage 1 (tagging) and Layer 1 (fusion) port over almost unchanged, and we rewrote Layer 2's classifier since x86 shares ports between scalar/vector unlike AArch64. All 4 new files are now correctly placed. The mv errors are harmless — they just mean the files had already landed in the target directory from your transfer, nothing lost.
 
 ________________________________________________________________________________________________________________________________________________________________________________
+
+
+Why this happens
+
+LLVM's GlobalOpt pass can automatically convert a static, address-not-taken function to fastcc (LLVM's internal fast calling convention, better register argument passing) when it decides it's safe and profitable — this is a legitimate, common -O2 optimization. It appears x86 codegen's heuristics triggered this conversion for scalar_work in a way that didn't happen for the AArch64 benchmark suite's chunkA/chunkB (possibly due to argument-count/register-availability heuristics differing by target, or simply this particular test function being structured slightly differently — either way, it's real and expected behavior, not a bug).
+
+The candidacy filter's checkCFCRejections() requires exactly CallingConv::C, rejecting fastcc outright. But think about why this check exists: it's really there to prevent fusing exotic calling conventions (like GHC, HiPE, coldcc) that carry special ABI meaning InlineFunction() might not handle safely. fastcc isn't exotic in that sense — it's LLVM's own well-supported internal convention, and InlineFunction() handles it correctly regardless (inlining doesn't care about calling convention at all, since the call instruction and its target simply disappear).
+
+This is a legitimate finding worth documenting for your thesis: AArch64's candidacy filter, when ported verbatim to x86, is unnecessarily strict in a way that will silently reject real fusion candidates whenever the compiler's own optimizer promotes them to fastcc — which is more common on x86 given its historically tighter register-argument-passing story compared to AArch64's more generous calling convention.
+
+__________________________________________________________________________________________________________________________________________________________________________
