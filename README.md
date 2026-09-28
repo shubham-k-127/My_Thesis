@@ -55,6 +55,21 @@ comp_imbalanced	1.130	0.998 (neutral)	—	0.994	⚠️ Mild conflict
 comp_imbalanced_dynamic	1.098	1.003 (neutral)	—	1.002	⚠️ Mild conflict
 What this means
 
+___________________________________________________________________________________________________________________________________________________________________
+| Scenario                    | Our CFC/SEQ | README CFC/SEQ | Our CFC/Default | README CFC/Default | Interpretation                                         |
+| --------------------------- | ----------: | -------------: | --------------: | -----------------: | ------------------------------------------------------ |
+| **large_imbalanced**        |  **1.376×** |         1.252× |      **1.227×** |             1.235× | **Strong agreement**; clear CFC benefit                |
+| **large_balanced**          |  **1.058×** |         1.232× |      **1.031×** |             1.214× | Same **GAIN** direction, but smaller magnitude         |
+| **comp_balanced**           |  **1.096×** |         1.098× |          ~1.00× |             0.993× | **Near-identical**; CFC/SEQ gain reproduced            |
+| **stress_membound**         |      ~1.00× |         1.000× |               — |             0.998× | **Neutral**, as expected for memory-bound workload     |
+| **tiny / tiny_noinline**    |  1.48–1.49× |     2.68–2.75× |           ~1.0× |              ~1.0× | Same **call-overhead artifact**, but magnitude differs |
+| **comp_near_limit**         |      1.064× |         1.244× |               — |             1.064× | Same **positive direction**                            |
+| **noncomp_scalar**          |      1.514× |         0.947× |          ~1.00× |             0.921× | **Conflict**: CFC/SEQ behaves differently              |
+| **noncomp_vector**          |      1.201× |         1.606× |          1.015× |             0.775× | **Conflict**, particularly against README CFC/Default  |
+| **comp_imbalanced**         |      1.130× |         0.998× |               — |             0.994× | **Mild conflict**                                      |
+| **comp_imbalanced_dynamic** |      1.098× |         1.003× |               — |             1.002× | **Mild conflict**                                      |
+___________________________________________________________________________________________________________________________________________________________________
+
 Where we match closely — large_balanced and large_imbalanced (the paper's headline scenarios: "large functions gain the most") — this is the strongest validation. The paper's central claim replicates on your setup even under QEMU emulation with a completely different simulated microarchitecture (Neoverse V2 emulated vs. real Apple M4 silicon).
 
 Where we conflict — noncomp_scalar is the most notable: the paper explicitly calls this out as an expected regression (both callees hit the same INT ports, so fusion should hurt, not help) — but our run shows a gain. Given QEMU is instruction-emulated rather than modeling real port contention, this is a plausible explanation: QEMU's interpreter doesn't actually simulate execution-port contention at all — it just executes instructions correctly, so any "port pressure" effect the paper measures on real silicon literally cannot be reproduced under emulation. This is an important, honest limitation to state clearly in your write-up: relative timing comparisons under QEMU can capture inlining/call-overhead effects (which do transfer) but cannot capture true port-level scheduling effects (which the emulator has no model of).
